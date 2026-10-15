@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: ["**"]
 
+permissions:
+  contents: read
+
+env:
+  OUTPUT_DIR: reports
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -43,23 +49,153 @@ jobs:
         run: npm test
         working-directory: notify
 
-  # TODO (candidates): Add the following security scanning jobs.
-  # Tool selection is your decision — document your choices in findings.md.
-  #
   # sast:
   #   Static Application Security Testing against app/ source code
   #   Upload JSON report as a build artifact named sast.<tool>.json
-  #   Build should fail on critical findings
-  #
+  #   Build fails on Critical findings
+  sast:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep
+        run: |
+          mkdir -p ${{env.OUTPUT_DIR}}
+          semgrep scan \
+            --config p/python --config p/fastapi --config p/owasp-top-ten \
+            --json \
+            --output ${{env.OUTPUT_DIR}}/sast.semgrep.json \
+            app/
+
+      - name: Upload Semgrep Results as an Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast.semgrep.json
+          path: ${{env.OUTPUT_DIR}}/sast.semgrep.json
+          if-no-files-found: error
+
+      - name: Gate - fail on Critical findings
+        run: |
+          REPORT=$OUTPUT_DIR/sast.semgrep.json
+          FINDINGS=$(jq -r '.results[]
+            | select(.extra.severity == "ERROR"
+                     or ((.extra.metadata.impact // "") | tostring | ascii_upcase) == "HIGH")
+            | "::error file=\(.path),line=\(.start.line)::\(.check_id)"' "$REPORT")
+          if [ -n "$FINDINGS" ]; then
+            echo "$FINDINGS"
+            echo "Semgrep: $(echo "$FINDINGS" | wc -l) critical finding(s)"
+            exit 1
+          fi
+          echo "Semgrep: no critical findings"
+
   # sca:
   #   Dependency / Software Composition Analysis against requirements.txt
   #   Upload JSON report as a build artifact named sca.<tool>.json
-  #   Build should fail on critical or high severity CVEs
-  #
+  #   Build fails on Critical or High severity CVEs
+  sca:
+    name: SCA - Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create report directory
+        run: mkdir -p ${{env.OUTPUT_DIR}}
+
+      - name: Trivy dependency scan
+        uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          scan-type: fs
+          scan-ref: requirements.txt
+          scanners: vuln
+          format: json
+          output: ${{env.OUTPUT_DIR}}/sca.trivy.json
+          exit-code: "0"
+
+      - name: Upload Trivy Results as an Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca.trivy.json
+          path: ${{env.OUTPUT_DIR}}/sca.trivy.json
+          if-no-files-found: error
+
+      - name: Gate - fail on Critical/High CVEs
+        run: |
+          REPORT=$OUTPUT_DIR/sca.trivy.json
+          FINDINGS=$(jq -r '.Results[]?.Vulnerabilities[]?
+            | select(.Severity == "CRITICAL" or .Severity == "HIGH")
+            | "::error::\(.VulnerabilityID) \(.PkgName) \(.InstalledVersion) [\(.Severity)] fixed in: \(.FixedVersion // "none")"' "$REPORT")
+          if [ -n "$FINDINGS" ]; then
+            echo "$FINDINGS"
+            echo "Trivy SCA: $(echo "$FINDINGS" | wc -l) critical/high CVE(s)"
+            exit 1
+          fi
+          echo "Trivy SCA: no critical/high CVEs"
+
   # container-scan:
   #   Build the Docker image, then scan it for vulnerabilities and misconfigurations
   #   Upload JSON report as a build artifact named container.<tool>.json
-  #
+  container-scan:
+    name: Container Scan - Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create report directory
+        run: mkdir -p ${{env.OUTPUT_DIR}}
+
+      - name: Build Docker image
+        run: docker build -t jitendra-asa:${{github.sha}} .
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          image-ref: jitendra-asa:${{github.sha}}
+          scanners: vuln,misconfig,secret
+          format: json
+          output: ${{env.OUTPUT_DIR}}/container.trivy.json
+          exit-code: "0"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container.trivy.json
+          path: ${{env.OUTPUT_DIR}}/container.trivy.json
+          if-no-files-found: error
+
   # iac-scan:
   #   Scan the Helm chart or Terraform configuration for security misconfigurations
   #   Upload JSON report as a build artifact named iac.<tool>.json
+  iac-scan:
+    name: IaC Scan - Checkov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov
+        run: |
+          mkdir -p ${{env.OUTPUT_DIR}}
+          checkov -d . --framework terraform --output json --soft-fail > ${{env.OUTPUT_DIR}}/iac.checkov.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iac.checkov.json
+          path: ${{env.OUTPUT_DIR}}/iac.checkov.json
+          if-no-files-found: error
