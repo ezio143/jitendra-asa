@@ -58,3 +58,15 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+def get_scan_from_token(token: str) -> dict[str, int]:
+    decoded_token = decode_token(token)
+    scan_id: Optional[int] = decoded_token.get("scan_id")
+    owner_id: Optional[int] = decoded_token.get("owner_id")
+    if scan_id is None or owner_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token payload")
+    payload = {"scan_id": scan_id, "owner_id": owner_id}
+    if "password" in decoded_token:
+        payload["password"] = decoded_token["password"]
+
+    return payload

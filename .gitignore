@@ -20,3 +20,4 @@ env/
 htmlcov/
 node_modules/
 .claude/
+bruno-collection/

@@ -1,16 +1,16 @@
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime,timedelta
 from typing import List, Optional
 
 import httpx
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import models
-from auth import create_access_token, get_current_user, get_password_hash, verify_password
+from auth import create_access_token, get_current_user, get_password_hash, verify_password,get_scan_from_token
 from config import NOTIFY_SERVICE_URL
 from database import engine, get_db, search_scans_by_query
 
@@ -106,6 +106,14 @@ class ScanOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+# model for share url
+
+class ShareResponse(BaseModel):
+    share_url: str
+
+class ShareRequest(BaseModel):
+    password: Optional[str] = None
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -271,6 +279,64 @@ def delete_scan(
     db.delete(scan)
     db.commit()
 
+# apis for sharing scans
+@app.post("/scans/{scan_id}/share", response_model=ShareResponse)
+def share_scan(
+    scan_id: int,
+    request: Request,
+    payload: Optional[ShareRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    scan = db.query(models.ScanResult).filter(
+        models.ScanResult.id == scan_id,
+        models.ScanResult.owner_id == current_user.id,
+    ).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    # Generate a shareable URL
+    token_payload = {"scan_id": scan.id, "owner_id": current_user.id}
+    if payload and len(payload.password) > 0:
+        token_payload["password"] = get_password_hash(payload.password)
+    token = create_access_token(
+        data=token_payload,
+        expires_delta=timedelta(hours=24),
+    )
+
+    # Dynamically construct base URL using the request headers
+    host = request.headers.get("host", "localhost:8000")
+    scheme = request.url.scheme
+    base_url = f"{scheme}://{host}"
+
+    share_url = f"{base_url}/share/{token}"
+
+    return ShareResponse(share_url=share_url)
+
+@app.get("/share/{token}", response_model=ScanOut)
+def get_shared_scan(
+    token: str,
+    password: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = get_scan_from_token(token)
+        scan_id = payload.get("scan_id")
+        owner_id = payload.get("owner_id")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if payload.get("password") and (password is None or not verify_password(password, payload["password"])):
+
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    scan = db.query(models.ScanResult).filter(
+        models.ScanResult.id == scan_id,
+        models.ScanResult.owner_id == owner_id
+    ).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    return scan
 
 # ---------------------------------------------------------------------------
 # Health
