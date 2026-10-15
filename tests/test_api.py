@@ -148,3 +148,44 @@ def test_delete_scan():
 
     resp = client.delete(f"/scans/{scan_id}", headers=auth_headers(token))
     assert resp.status_code == 204
+
+
+def test_shared_scan():
+    token = register_and_login()
+    scan_id = client.post("/scans", json={
+        "title": "Shared finding",
+        "severity": "medium",
+        "affected_component": "misc",
+    }, headers=auth_headers(token)).json()["id"]
+
+    share_resp = client.post(f"/scans/{scan_id}/share", headers=auth_headers(token))
+    share_url = share_resp.json()["share_url"]
+    token_param = share_url.split("token=")[-1]
+
+    access_resp = client.get(f"{token_param}")
+    assert access_resp.status_code == 200
+    assert access_resp.json()["id"] == scan_id
+
+def test_shared_scan_with_password():
+    token = register_and_login()
+    scan_id = client.post("/scans", json={
+        "title": "Password protected finding",
+        "severity": "high",
+        "affected_component": "misc",
+    }, headers=auth_headers(token)).json()["id"]
+
+    # Generate share URL with password
+    share_resp = client.post(f"/scans/{scan_id}/share", json={"password": "secret123"}, headers=auth_headers(token))
+    share_url = share_resp.json()["share_url"]
+    token_param = share_url.split("token=")[-1]
+
+    print("debug token_param:", token_param)  # Debugging line
+
+    # Access the shared scan with the correct password
+    access_resp = client.get(f"{token_param}?password=secret123")
+    assert access_resp.status_code == 200
+    assert access_resp.json()["id"] == scan_id
+
+    # Attempt to access with an incorrect password
+    wrong_access_resp = client.get(f"{token_param}?password=wrongpass")
+    assert wrong_access_resp.status_code == 401
