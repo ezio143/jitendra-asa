@@ -1,12 +1,14 @@
 # Based on the tools and manual code review I have summarized my findings below
 
 ## Tooling
-| Category | Tool |
-|---|---|---|
-| SAST | Semgrep (`p/python`, `p/fastapi`, `p/owasp-top-ten`) 
-| SCA | Trivy (`fs` on `requirements.txt`) 
-| Container | Trivy (image) 
-| IaC | Checkov
+
+| SAST - Semgrep (`p/python`, `p/fastapi`, `p/owasp-top-ten`) 
+
+| SCA - Trivy (`fs` on `requirements.txt`) 
+
+| Container - Trivy (image) 
+
+| IaC - Checkov
 
 ## Overall Findings
 
