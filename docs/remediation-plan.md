@@ -1,5 +1,12 @@
 # Remediation Plan
 
+
+## Hardcoded Credentials
+tool: gitleaks can be used to prevent the secrets added to repository
+residual risk: hardcoding credentials is difficult to manage through env or manifests
+severity: Critical
+remediation: hardcoded credentials in app/config.py can be moved to vault/secrets manager
+
 ## Python jose 3.3.0
 
 tool : Trivy - SCA

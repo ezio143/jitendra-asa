@@ -11,10 +11,19 @@
 ## Overall Findings
 
 <!-- Gates only on SAST/SCA -->
+
 SAST (Semgrep) - 2 Critical, 1 High , 1 Low Findings
 SCA (Trivy) - 27 total ,  2 Critical/ 10 High Findings
+Manual Findings - 
 
 ## Findings Summary
+0. Hardcoded credentials
+tool: Manual - SAST
+location: app/config.py
+severity: Critical
+business impact: High - credentials theft from repositories may lead to sensitive information disclosure
+source: starter code
+
 1. Plaintext password logged
 
 tool: Manual / Semgrep - SAST
