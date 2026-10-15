@@ -11,8 +11,8 @@
 ## Overall Findings
 
 <!-- Gates only on SAST/SCA -->
-SAST (Semgrep) - 2 Critical, 1 High Findings
-SCA (Trivy) - 2 Critical/ 10 High Findings
+SAST (Semgrep) - 2 Critical, 1 High , 1 Low Findings
+SCA (Trivy) - 27 total ,  2 Critical/ 10 High Findings
 
 ## Findings Summary
 1. Plaintext password logged
@@ -45,7 +45,7 @@ source: starter code
 tool: Trivy - SCA
 location: requirements.txt
 severity: High
-business impact: High - the library is used in unauthenticated api route which can cause account takeover
+business impact: High - the library is used in unauthenticated api route which can cause account takeover, also no fix available for CVE-2026-85394 - switch to pyjwt recommended
 source: starter code
 
 5. python-multipart 0.0.6 (9 findings)
