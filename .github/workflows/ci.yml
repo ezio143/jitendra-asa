@@ -119,6 +119,7 @@ jobs:
           format: json
           output: ${{env.OUTPUT_DIR}}/sca.trivy.json
           exit-code: "0"
+          trivyignores: .trivyignore.yml
 
       - name: Upload Trivy Results as an Artifact
         if: always()
