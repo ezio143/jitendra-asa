@@ -1,0 +1,8 @@
+vulnerabilities:
+  - id: CVE-2026-85394
+    paths:
+      - "requirements.txt"
+    purls:
+      - "pkg:pypi/python-jose"
+    expired_at: 2026-12-31
+    statement: "Vulnerability is Mitigated as HS256 with symmetric secret only; algorithms=['HS256'] pinned; no asymmetric verification. Migration to PyJWT is recommended."
